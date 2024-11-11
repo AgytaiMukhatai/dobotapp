@@ -2,9 +2,6 @@ import streamlit as st
 import requests
 import io
 from PIL import Image
-import svgwrite
-import base64
-from io import BytesIO
 
 # Hugging Face API token
 headers = {"Authorization": "Bearer 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"}
@@ -32,26 +29,6 @@ def query_huggingface(prompt, api_url):
         return None, response.json()  # Return the error message if JSON
     return response.content, None  # Return image bytes if successful
 
-# Function to convert PNG to SVG
-def png_to_svg(image_bytes):
-    # Open the PNG image from bytes
-    image = Image.open(io.BytesIO(image_bytes))
-    width, height = image.size
-
-    # Create an SVG drawing
-    dwg = svgwrite.Drawing("output_image.svg", profile='tiny', size=(width, height))
-
-    # Convert the image to base64 to embed in SVG
-    buffered = BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
-
-    # Add the image to the SVG
-    dwg.add(dwg.image(f"data:image/png;base64,{img_str}", insert=(0, 0), size=(width, height)))
-
-    # Save the SVG file
-    dwg.save()
-
 # Button for each model
 col1, col2, col3 = st.columns(3)
 
@@ -68,8 +45,6 @@ with col1:
             elif image_bytes:
                 image = Image.open(io.BytesIO(image_bytes))
                 st.image(image, caption="Generated Image", use_column_width=True)
-                png_to_svg(image_bytes)
-                st.success("Image converted to SVG and saved as 'output_image.svg'.")
             else:
                 st.warning("No image received from the API.")
 
@@ -86,8 +61,6 @@ with col2:
             elif image_bytes:
                 image = Image.open(io.BytesIO(image_bytes))
                 st.image(image, caption="Generated Image", use_column_width=True)
-                png_to_svg(image_bytes)
-                st.success("Image converted to SVG and saved as 'output_image.svg'.")
             else:
                 st.warning("No image received from the API.")
 
@@ -104,7 +77,5 @@ with col3:
             elif image_bytes:
                 image = Image.open(io.BytesIO(image_bytes))
                 st.image(image, caption="Generated Image", use_column_width=True)
-                png_to_svg(image_bytes)
-                st.success("Image converted to SVG and saved as 'output_image.svg'.")
             else:
                 st.warning("No image received from the API.")
