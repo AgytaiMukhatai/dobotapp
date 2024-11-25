@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import io
 from PIL import Image
+import serial
 
 # Hugging Face API token
 headers = {"Authorization": "Bearer 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"}
@@ -28,6 +29,25 @@ def query_huggingface(prompt, api_url):
     if response.headers["Content-Type"] == "application/json":
         return None, response.json()  # Return the error message if JSON
     return response.content, None  # Return image bytes if successful
+
+# Function to check if the robot is connected
+def check_robot_connection(port):
+    try:
+        # Attempt to open a serial connection
+        ser = serial.Serial(port, baudrate=115200, timeout=0.5)
+        ser.close()  # If successful, close immediately
+        return True
+    except Exception as e:
+        return False
+
+# Robot connection check section
+st.sidebar.header("Robot Connection")
+robot_port = st.sidebar.text_input("Enter Robot Port:", "COM4")
+if st.sidebar.button("Check Connection"):
+    if check_robot_connection(robot_port):
+        st.sidebar.success(f"Robot is connected on {robot_port}")
+    else:
+        st.sidebar.error(f"Failed to connect to the robot on {robot_port}")
 
 # Button for each model
 col1, col2, col3 = st.columns(3)
