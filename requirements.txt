@@ -1,1 +1,3 @@
 pyserial
+serial
+matplotlib
