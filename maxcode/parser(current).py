@@ -66,4 +66,3 @@ with open("coordinates.txt", "w") as f:
     for x, y in centered_coords:
         f.write(f"{x}, {y}\n")
 
-print(f"Es wurden {len(centered_coords)} Koordinaten zentriert, skaliert und reduziert.")
