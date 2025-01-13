@@ -52,7 +52,7 @@ def center_and_scale_coordinates(coords, target_x_min, target_x_max, target_y_mi
     centered_coords = [(x + dx, y + dy) for x, y in scaled_coords]
     return centered_coords
 
-svg_file_path = "raccoon.svg"
+svg_file_path = "Slovenia.svg"
 coords = svg_to_coordinates(svg_file_path, resolution=100)
 
 reduced_coords = reduce_points(coords, max_points=2000)
