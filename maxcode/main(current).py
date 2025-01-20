@@ -5,8 +5,10 @@ import numpy as np
 
 
 
-svg_file_path = "Slovenia.svg"
 device = pydobot.Dobot(port='/dev/tty.usbserial-0001', verbose=True)
+
+svg_file_path = "raccoon.svg"
+
 
 
 def svg_to_coordinates(svg_file, resolution=100):
@@ -64,7 +66,7 @@ coords = svg_to_coordinates(svg_file_path, resolution=100)
 reduced_coords = reduce_points(coords, max_points=2000)
 
 target_x_min, target_x_max = 200, 300
-target_y_min, target_y_max = -100, 100
+target_y_min, target_y_max = -75, 75
 
 centered_coords = center_and_scale_coordinates(reduced_coords, target_x_min, target_x_max, target_y_min, target_y_max)
 
@@ -90,8 +92,7 @@ def transform_coordinates(coords, scale=1.0, offset=(0, 0)):
     dx, dy = offset
     return [(x * scale + dx, y * scale + dy) for x, y in coords]
 
-
-device.move_to(200, -100, 0, 0, wait=False)
+device.move_to(200, -75, -48.2, 0, wait=False)
 
 coords = svg_to_coordinates(svg_file_path, resolution=100)
 
@@ -104,7 +105,6 @@ for dx, dy in scaled_coords:
     target_x = current_x + dx
     target_y = current_y + dy
     device.move_to(target_x, target_y, z_draw_height, r, wait=False)
-
 
 device.close() 
 
