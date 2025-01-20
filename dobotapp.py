@@ -4,152 +4,194 @@ import io
 from PIL import Image
 import serial
 import os
-import subprocess
-
+import tempfile
+import image_preprocessing
+import time
 
 # Hugging Face API token
 headers = {"Authorization": "Bearer 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"}
 
-# Model URLs
+# Model URLs with descriptions
 model_urls = {
-    "Doodle Redmond (Hand Drawing Style)": "https://api-inference.huggingface.co/models/artificialguybr/doodle-redmond-doodle-hand-drawing-style-lora-for-sd-xl",
-    "FLUX (Children Simple Sketch)": "https://api-inference.huggingface.co/models/Shakker-Labs/FLUX.1-dev-LoRA-Children-Simple-Sketch",
-    "Gesture Draw": "https://api-inference.huggingface.co/models/glif/Gesture-Draw"
+    "Doodle Redmond (Hand Drawing Style)": {
+        "url": "https://api-inference.huggingface.co/models/artificialguybr/doodle-redmond-doodle-hand-drawing-style-lora-for-sd-xl",
+        "description": "Generates sketched, hand-drawn style images."
+    },
+    "FLUX (Children Simple Sketch)": {
+        "url": "https://api-inference.huggingface.co/models/Shakker-Labs/FLUX.1-dev-LoRA-Children-Simple-Sketch",
+        "description": "Produces simple childlike sketches with playful themes."
+    },
+    "Gesture Draw": {
+        "url": "https://api-inference.huggingface.co/models/glif/Gesture-Draw",
+        "description": "Specializes in capturing dynamic gestures in drawings."
+    }
 }
 
-# Define a function to make a request to the Hugging Face API
-def query_huggingface(prompt, api_url):
-    response = requests.post(api_url, headers=headers, json={"inputs": prompt})
-    
-    if response.headers["Content-Type"] == "application/json":
-        return None, response.json()
-    return response.content, None
+# Query Hugging Face API for image generation
+def query_huggingface(prompt, api_url, retries=3, timeout=60):
+    modified_prompt = f"{prompt}, sketched, outlined"
+    attempt = 0
+    while attempt < retries:
+        try:
+            response = requests.post(api_url, headers=headers, json={"inputs": modified_prompt}, timeout=timeout)
+            response.raise_for_status()  # Check for HTTP errors
+            if response.headers["Content-Type"] == "application/json":
+                return None, response.json()
+            return response.content, None
+        except requests.exceptions.Timeout:
+            attempt += 1
+            if attempt < retries:
+                st.warning(f"Timeout occurred. Retrying... ({attempt}/{retries})")
+                time.sleep(5)  # Wait before retrying
+            else:
+                return None, {"error": "The request timed out after multiple retries. Please try again later."}
+        except requests.exceptions.RequestException as e:
+            return None, {"error": str(e)}
 
-# Function to check if the robot is connected
+# Save image to a temporary file
+def save_image_to_tempfile(image_bytes):
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+            with Image.open(io.BytesIO(image_bytes)) as img:
+                img.save(temp_file.name)
+            return temp_file.name
+    except Exception as e:
+        raise RuntimeError(f"Error saving image to temporary file: {e}")
+
+# Process image through the pipeline
+def process_image(temp_image_path):
+    try:
+        output_path = image_preprocessing.pipeline(temp_image_path, True)
+        return output_path
+    except Exception as e:
+        raise RuntimeError(f"Error during image processing: {e}")
+
+# Check robot connection
 def check_robot_connection(port):
     try:
         ser = serial.Serial(port, baudrate=115200, timeout=0.5)
-        ser.close()  
+        ser.close()
         return True
-    except Exception as e:
+    except Exception:
         return False
 
+# Handle image generation and display
+def handle_image_generation(prompt, model_name, model_url):
+    if prompt.strip() == "":
+        st.warning("Please enter a prompt.")
+        return None
 
+    image_bytes, error = query_huggingface(prompt, model_url)
+    if error:
+        st.error(f"Error: {error.get('error', 'An unknown error occurred')}")
+        return None
+    if not image_bytes:
+        st.warning("No image received from the API.")
+        return None
 
-# Streamlit App Layout
-st.title("Dobot Draw Studio")
-st.write("Choose whether to upload your own image or generate one using a model.")
+    try:
+        temp_image_path = save_image_to_tempfile(image_bytes)
+        st.image(Image.open(temp_image_path), caption=f"Generated Image ({model_name})", use_container_width=True)
+        st.session_state["generated_image_path"] = temp_image_path
+        st.write(f"Generated image saved at: {temp_image_path}")
+        return temp_image_path
+    except Exception as e:
+        st.error(f"Error saving image: {e}")
+        return None
 
-# User choice: upload or generate
-choice = st.radio("What would you like to do?", ["Upload an Image", "Generate an Image"])
+# Handle sending image to robot for drawing
+def handle_drawing(temp_image_path):
+    try:
+        st.success("🎨 Sending image to the robot for drawing...")
+        print(f"Type of temp_image_path: {type(temp_image_path)}")  # Debugging line
+        #st.write(f"Path: {temp_image_path}")
 
-if choice == "Upload an Image":
-    # Image Upload Section
-    st.header("Upload Your Image")
-    uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "png", "jpeg"])
+        # Ensure temp_image_path is a string (a single path), not a list
+        if isinstance(temp_image_path, list):
+            # Handle the case where temp_image_path is a list
+            for path in temp_image_path:
+                output_path = process_image(path)
+                st.image(Image.open(output_path), caption="Processed Image for Robot", use_container_width=True)
+                # You can also send coordinates to the robot for each image if needed
+        else:
+            # Process a single image if temp_image_path is not a list
+            output_path = process_image(temp_image_path)
+            st.image(Image.open(output_path), caption="Processed Image for Robot", use_container_width=True)
+            # Send coordinates to the robot if necessary
+
+    except Exception as e:
+        st.error(f"An error occurred while processing the image: {e}")
+
+# Main Streamlit app
+def main():
+    st.title("Dobot Draw Studio")
+    st.write("Choose whether to upload your own image or generate one using a model.")
+
+    # User choice: upload or generate
+    choice = st.radio("What would you like to do?", ["Upload an Image", "Generate an Image"])
+    if "temp_image_path" not in st.session_state:
+        st.session_state["temp_image_path"] = None
     
-    if uploaded_file is not None:
-        uploaded_image = Image.open(uploaded_file)
-        st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
+    if choice == "Upload an Image":
+        # Image Upload Section
+        st.header("Upload Your Image")
+        uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "png", "jpeg"])
+        if uploaded_file is not None:
+            try:
+                uploaded_image = Image.open(uploaded_file)
+                st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
 
-        # Process the uploaded image
-        with open("uploaded_image.jpg", "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+                    uploaded_image.save(temp_file.name)
+                    temp_image_path = temp_file.name
+                    st.session_state["temp_image_path"] = temp_image_path
+                    st.write(f"Uploaded image saved at: {temp_image_path}")
 
-        # "Draw" button for uploaded image
-        if st.button("Draw Uploaded Image"):
-            st.success("🎨 Sending uploaded image to the robot for drawing...")
-            # Here you would add the logic to send the processed paths to the robot.
+                #if st.button("Draw Uploaded Image"):
+                    #handle_drawing(temp_image_path)
+
+            except Exception as e:
+                st.error(f"Error handling uploaded image: {e}")
+        #else:
+            #st.warning("Please upload an image file to proceed.")
 
     else:
-        st.warning("Please upload an image file to view it here.")
+        # Image Generation Section
+        st.header("Generate an Image")
+        prompt = st.text_input("Enter your prompt:", "Astronaut riding a horse")
 
-else:
-    # Image Generation Section
-    st.header("Generate an Image")
-    prompt = st.text_input("Enter your prompt:", "Astronaut riding a horse")
+        # Select model
+        model_name = st.selectbox(
+            "Select a model:",
+            options=list(model_urls.keys()),
+            format_func=lambda x: f"{x} - {model_urls[x]['description']}"
+        )
 
-    col1, col2, col3 = st.columns(3)
+        if st.button("Generate Image"):
+            model_url = model_urls[model_name]["url"]
+            
+            temp_image_path = handle_image_generation(prompt, model_name, model_url)
+            if temp_image_path:
+                st.session_state["temp_image_path"] = temp_image_path
+            #if st.button("Draw Generated Image", key=f"draw_{model_name}"):
+            # Ensure the path exists in session state
+                #if "generated_image_path" in st.session_state and st.session_state["generated_image_path"]:
+                    #st.success("🎨 Sending generated image to the robot for drawing...")
+                    #try:
+                    # Process the image
+                        #output_path = image_preprocessing.pipeline(st.session_state["generated_image_path"], True)
+                        #st.image(Image.open(output_path), caption="Processed Image", use_container_width=True)
+                    #except Exception as e:
+                        #st.error(f"An error occurred while processing the image: {e}")
+                #else:
+                    #st.warning("No generated image found. Please generate an image first.")
+    
+    if st.session_state["temp_image_path"]:
+        if st.button("Process and Draw Image"):
+            handle_drawing(st.session_state["temp_image_path"])
+    else:
+        st.info("Please upload or generate an image first to enable drawing.")
+    
 
-    with col1:
-        if st.button("Generate with Doodle Redmond Model"):
-            if prompt.strip() == "":
-                st.warning("Please enter a prompt.")
-            else:
-                modified_prompt = f"{prompt}, sketched, outlined"
-                image_bytes, error = query_huggingface(modified_prompt, model_urls["Doodle Redmond (Hand Drawing Style)"])
-                
-                if error:
-                    st.error(f"Error: {error.get('error', 'An unknown error occurred')}")
-                elif image_bytes:
-                    generated_image = Image.open(io.BytesIO(image_bytes))
-                    st.image(generated_image, caption="Generated Image", use_container_width=True)
-
-                    # Process the generated image
-                    with open("generated_image.jpg", "wb") as f:
-                        f.write(image_bytes)
-
-                    
-
-                    # "Draw" button for generated image
-                    if st.button("Draw Generated Image (Doodle Redmond)", key="draw_doodle_redmond"):
-                        st.success("🎨 Sending generated image to the robot for drawing...")
-                        # Here you would add the logic to send the processed paths to the robot.
-                else:
-                    st.warning("No image received from the API.")
-
-    with col2:
-        if st.button("Generate with FLUX Model"):
-            if prompt.strip() == "":
-                st.warning("Please enter a prompt.")
-            else:
-                modified_prompt = f"{prompt}, sketched, outlined, grayscale, not-complicated"
-                image_bytes, error = query_huggingface(modified_prompt, model_urls["FLUX (Children Simple Sketch)"])
-                
-                if error:
-                    st.error(f"Error: {error.get('error', 'An unknown error occurred')}")
-                elif image_bytes:
-                    generated_image = Image.open(io.BytesIO(image_bytes))
-                    st.image(generated_image, caption="Generated Image", use_container_width=True)
-
-                    # Process the generated image
-                    with open("generated_image.jpg", "wb") as f:
-                        f.write(image_bytes)
-
-                    
-
-                    # "Draw" button for generated image
-                    if st.button("Draw Generated Image (FLUX)", key="draw_flux"):
-                        st.success("🎨 Sending generated image to the robot for drawing...")
-                        # Here you would add the logic to send the processed paths to the robot.
-                else:
-                    st.warning("No image received from the API.")
-
-    with col3:
-        if st.button("Generate with Gesture Draw model"):
-            if prompt.strip() == "":
-                st.warning("Please enter a prompt.")
-            else:
-                modified_prompt = f"{prompt}, sketched"
-                image_bytes, error = query_huggingface(modified_prompt, model_urls["Gesture Draw"])
-                
-                if error:
-                    st.error(f"Error: {error.get('error', 'An unknown error occurred')}")
-                elif image_bytes:
-                    generated_image = Image.open(io.BytesIO(image_bytes))
-                    st.image(generated_image, caption="Generated Image", use_container_width=True)
-
-                    # Process the generated image
-                    with open("generated_image.jpg", "wb") as f:
-                        f.write(image_bytes)
-
-                    
-
-                    # "Draw" button for generated image
-                    if st.button("Draw Generated Image (Gesture Draw)", key="draw_gesture"):
-                        st.success("🎨 Sending generated image to the robot for drawing...")
-                        # Here you would add the logic to send the processed paths to the robot.
-                else:
-                    st.warning("No image received from the API.")
+if __name__ == "__main__":
+    main()
