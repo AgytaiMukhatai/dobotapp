@@ -2,3 +2,4 @@ pyserial
 serial
 matplotlib
 svgpathtools
+shapely.geometry
