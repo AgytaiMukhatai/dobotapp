@@ -1,34 +1,33 @@
 from pydobot import Dobot
+import image_preprocessing
 
 class DobotController:
     def __init__(self, port):
         """Initialize the DobotController and set speed."""
-        self.bot = Dobot(port=port, verbose=False)
-        self.bot.speed(100, 100)
-    
+        try:
+            self.bot = Dobot(port=port, verbose=False)
+            self.bot.speed(100, 100)
+        except AttributeError as e:
+            print(f"Error initializing Dobot: {e}")
+            raise
+
     def set_home_position(self, x, y, z):
-        self.bot.move_to(x, y, z, 0, wait=True) 
-
-        # Set the current position as the new home position
-        self.bot.set_home_command()  # This command saves the current position as the home
-
-        # Test the new home position
-        self.bot.home()  #
+        self.bot.move_to(x, y, z, 0, wait=True)
+        self.bot.set_home_command()
+        self.bot.home()
 
     def move_pen(self, x, y, z):
         """Move the pen/tool to specified coordinates."""
-        self.bot.move_to(x, y, z, 0, wait=True)
+        try:
+            self.bot.move_to(x, y, z, 0, wait=True)
+        except Exception as e:
+            print(f"Error moving to point ({x}, {y}, {z}): {e}")
 
     def validate_point(self, point):
         """Ensure a point contains float coordinates."""
         if len(point) != 2:
             raise ValueError(f"Invalid point: {point}. Must have two coordinates.")
         return float(point[0]), float(point[1])
-
-    def draw_line(self, x1, y1, x2, y2, z=-60):
-        """Draw a line from (x1, y1) to (x2, y2) at a specified Z level."""
-        self.move_pen(x1, y1, z)
-        self.move_pen(x2, y2, z)
 
     def draw_path(self, path, draw_z=-60, lift_z=-50):
         """Draw a path connecting all points in the given path."""
@@ -38,6 +37,7 @@ class DobotController:
 
         for i, point in enumerate(path):
             x, y = self.validate_point(point)
+            print(f"Drawing point {i + 1}: ({x}, {y})")  # Added print to show the drawing step
             if i == 0:
                 self.move_pen(x, y, lift_z)  # Start at lift height
                 self.move_pen(x, y, draw_z)  # Lower pen to start drawing
@@ -47,7 +47,7 @@ class DobotController:
         # Lift the pen after completing the path
         x, y = self.validate_point(path[-1])
         self.move_pen(x, y, lift_z)
-
+    
     def draw_paths(self, paths, draw_z=-60, lift_z=-30):
         """Draw multiple paths, lifting the pen between paths."""
         for path in paths:
@@ -56,3 +56,14 @@ class DobotController:
             else:
                 print("Skipping empty path.")
         print("Finished drawing all paths.")
+
+# Load the preprocessed image paths
+#output_image = image_preprocessing.pipeline("egg.jpg", False)
+#if not output_image:
+    #raise ValueError("Image preprocessing returned empty data.")
+
+# Initialize the DobotController
+#dobot = DobotController("COM4")
+
+# Draw points step by step for each path
+#dobot.draw_paths(output_image)
