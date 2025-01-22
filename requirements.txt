@@ -4,3 +4,4 @@ serial
 matplotlib
 svgpathtools
 shapely
+pydobot
