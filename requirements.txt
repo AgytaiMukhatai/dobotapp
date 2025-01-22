@@ -5,4 +5,4 @@ matplotlib
 svgpathtools
 shapely
 pydobot
-potrace
+
