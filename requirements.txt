@@ -1,3 +1,4 @@
+streamlit
 pyserial
 serial
 matplotlib
