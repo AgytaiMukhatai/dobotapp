@@ -152,8 +152,8 @@ def svg_to_coordinates(svg_file, resolution=100):
 def pipeline(jpeg_file, visualize=False):
 
     # Borders of the drawing
-    min_x, max_x = 210, 270
-    min_y, max_y = -40, 20
+    min_x, max_x = 0, 300
+    min_y, max_y = -150, 150
 
     # 1. Convert JPEG to SVG
     svg_file = jpg_to_svg(jpeg_file)
