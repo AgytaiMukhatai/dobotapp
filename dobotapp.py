@@ -7,6 +7,11 @@ import os
 import tempfile
 import image_preprocessing
 import time
+import dobot_controller
+from pydobot import Dobot
+
+#dobot = dobot_controller.DobotController("COM4")
+
 
 # Hugging Face API token
 headers = {"Authorization": "Bearer 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"}
@@ -104,20 +109,30 @@ def handle_drawing(temp_image_path):
     try:
         st.success("🎨 Sending image to the robot for drawing...")
         print(f"Type of temp_image_path: {type(temp_image_path)}")  # Debugging line
-        #st.write(f"Path: {temp_image_path}")
 
         # Ensure temp_image_path is a string (a single path), not a list
         if isinstance(temp_image_path, list):
             # Handle the case where temp_image_path is a list
-            for path in temp_image_path:
-                output_path = process_image(path)
-                st.image(Image.open(output_path), caption="Processed Image for Robot", use_container_width=True)
-                # You can also send coordinates to the robot for each image if needed
+            
+            output_path = process_image(temp_image_path)
+            st.image(Image.open(output_path), caption="Processed Image for Robot", use_container_width=True)
+                # Send coordinates to the robot for each image if needed
+            output_image = image_preprocessing.pipeline(output_path, False)
+            print(output_image)
+            if not output_image:
+                raise ValueError("Image preprocessing returned empty data.")
+            dobot = dobot_controller.DobotController("COM4")
+            dobot.draw_paths([output_image])
         else:
             # Process a single image if temp_image_path is not a list
             output_path = process_image(temp_image_path)
             st.image(Image.open(output_path), caption="Processed Image for Robot", use_container_width=True)
             # Send coordinates to the robot if necessary
+            output_image = image_preprocessing.pipeline(output_path, False)
+            if not output_image:
+                raise ValueError("Image preprocessing returned empty data.")
+            dobot = dobot_controller.DobotController("COM4")
+            dobot.draw_paths(output_image)
 
     except Exception as e:
         st.error(f"An error occurred while processing the image: {e}")
