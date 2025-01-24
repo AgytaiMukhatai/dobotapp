@@ -1,5 +1,5 @@
 from pydobot import Dobot
-import image_preprocessing
+
 
 class DobotController:
     def __init__(self, port):
@@ -12,6 +12,21 @@ class DobotController:
             raise
 
     def set_home_position(self, x, y, z):
+        """
+        Set the home position for the Dobot.
+
+        This function moves the Dobot to the specified position (x, y, z), 
+        sets the current position as the new home position, 
+        and then tests the new home position to ensure it is correctly set.
+
+        Parameters:
+            x (float): The x-coordinate of the new home position.
+            y (float): The y-coordinate of the new home position.
+            z (float): The z-coordinate of the new home position.
+
+        Returns:
+        None
+        """
         self.bot.move_to(x, y, z, 0, wait=True)
         self.bot.set_home_command()
         self.bot.home()
@@ -57,13 +72,4 @@ class DobotController:
                 print("Skipping empty path.")
         print("Finished drawing all paths.")
 
-# Load the preprocessed image paths
-#output_image = image_preprocessing.pipeline("egg.jpg", False)
-#if not output_image:
-    #raise ValueError("Image preprocessing returned empty data.")
 
-# Initialize the DobotController
-#dobot = DobotController("COM4")
-
-# Draw points step by step for each path
-#dobot.draw_paths(output_image)
