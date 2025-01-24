@@ -9,7 +9,11 @@ import time
 import dobot_controller
 
 
-
+st.set_page_config(
+    page_title="Dobot Draw Studio",
+    layout="wide",  # Ensures the layout allows space for a sidebar
+    initial_sidebar_state="expanded",  # Sidebar is expanded by default
+)
 
 # Hugging Face API token
 headers = {"Authorization": "Bearer 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"}
