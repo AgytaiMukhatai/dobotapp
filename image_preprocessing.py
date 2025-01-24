@@ -1,14 +1,12 @@
 import matplotlib.pyplot as plt
 from PIL import Image
 import svgpathtools
-import os
 import subprocess
 from shapely.geometry import LineString
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import streamlit as st
 from svgpathtools import svg2paths
-import numpy as np
+
 
 # Function to convert JPEG to SVG using potrace
 def jpg_to_svg(jpg_file):
@@ -68,7 +66,7 @@ def svg_to_paths(svg_file):
 
 def adjust_points_to_borders(paths, min_x, max_x, min_y, max_y):
     """
-    Adjusts points from paths to fit within the given borders.
+    Adjusts points from paths to fit within the given borders while preserving proportions.
 
     Parameters:
     - paths (list of list of tuples): List of paths, where each path is a list of (x, y) coordinates.
@@ -78,7 +76,7 @@ def adjust_points_to_borders(paths, min_x, max_x, min_y, max_y):
     - max_y (float): Maximum y-coordinate of the border.
 
     Returns:
-    - adjusted_paths (list of list of tuples): Paths with points adjusted to fit within the borders.
+    - adjusted_paths (list of list of tuples): Paths with points adjusted to fit within the borders while preserving proportions.
     """
     # Calculate the original bounding box of the points
     all_points = [point for path in paths for point in path]
@@ -87,14 +85,29 @@ def adjust_points_to_borders(paths, min_x, max_x, min_y, max_y):
     orig_min_y = min(point[1] for point in all_points)
     orig_max_y = max(point[1] for point in all_points)
 
-    # Scale and shift points to fit within the new borders
+    # Calculate the original width and height
+    orig_width = orig_max_x - orig_min_x
+    orig_height = orig_max_y - orig_min_y
+
+    # Calculate the target width and height
+    target_width = max_x - min_x
+    target_height = max_y - min_y
+
+    # Determine the scaling factor to preserve proportions
+    scale = min(target_width / orig_width, target_height / orig_height)
+
+    # Calculate the offset to center the image within the borders
+    offset_x = min_x + (target_width - orig_width * scale) / 2
+    offset_y = min_y + (target_height - orig_height * scale) / 2
+
+    # Adjust points to fit within the borders
     adjusted_paths = []
     for path in paths:
         adjusted_path = []
         for x, y in path:
-            # Scale x and y to fit within the borders
-            new_x = ((x - orig_min_x) / (orig_max_x - orig_min_x)) * (max_x - min_x) + min_x
-            new_y = ((y - orig_min_y) / (orig_max_y - orig_min_y)) * (max_y - min_y) + min_y
+            # Scale and shift x and y to preserve proportions and fit within borders
+            new_x = (x - orig_min_x) * scale + offset_x
+            new_y = (y - orig_min_y) * scale + offset_y
             adjusted_path.append((new_x, new_y))
         adjusted_paths.append(adjusted_path)
 
@@ -139,15 +152,6 @@ def visualize_paths(paths, title="Adjusted Paths"):
     plt.grid(True)
     st.pyplot(plt)
 
-def svg_to_coordinates(svg_file, resolution=100):
-    paths, attributes = svg2paths(svg_file)
-    coordinates = []
-    for path in paths:
-        for i in np.linspace(0, 1, resolution):
-            point = path.point(i)
-            coordinates.append((point.real, point.imag))
-    return coordinates
-
 
 def pipeline(jpeg_file, visualize=False):
 
@@ -166,14 +170,6 @@ def pipeline(jpeg_file, visualize=False):
 
     # 4 Simplify paths
     simplified_paths = simplify_paths(adjusted_paths)
-
-    #coordinates = []
-    #for path in simplified_paths:
-        #path_coords = []
-        #for point in path:  # Assuming each path contains a list of points
-            #x, y = point
-            #path_coords.append((x, y))
-        #coordinates.append(path_coords)
 
     # 5. Visualize paths (optional)
     if visualize:
