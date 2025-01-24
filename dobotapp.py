@@ -3,14 +3,12 @@ import requests
 import io
 from PIL import Image
 import serial
-import os
 import tempfile
 import image_preprocessing
 import time
 import dobot_controller
-from pydobot import Dobot
 
-#dobot = dobot_controller.DobotController("COM4")
+
 
 
 # Hugging Face API token
@@ -98,7 +96,7 @@ def handle_image_generation(prompt, model_name, model_url):
         temp_image_path = save_image_to_tempfile(image_bytes)
         st.image(Image.open(temp_image_path), caption=f"Generated Image ({model_name})", use_container_width=True)
         st.session_state["generated_image_path"] = temp_image_path
-        st.write(f"Generated image saved at: {temp_image_path}")
+        #st.write(f"Generated image saved at: {temp_image_path}")
         return temp_image_path
     except Exception as e:
         st.error(f"Error saving image: {e}")
@@ -108,7 +106,7 @@ def handle_image_generation(prompt, model_name, model_url):
 def handle_drawing(temp_image_path):
     try:
         st.success("🎨 Sending image to the robot for drawing...")
-        print(f"Type of temp_image_path: {type(temp_image_path)}")  # Debugging line
+        #print(f"Type of temp_image_path: {type(temp_image_path)}")  # Debugging line
 
         # Ensure temp_image_path is a string (a single path), not a list
         if isinstance(temp_image_path, list):
@@ -135,20 +133,28 @@ def handle_drawing(temp_image_path):
             dobot.draw_paths(output_image)
 
     except Exception as e:
-        st.error(f"An error occurred while processing the image: {e}")
+        print(f"An error occurred while processing the image: {e}")
 
 # Main Streamlit app
 def main():
     st.title("Dobot Draw Studio")
     st.write("Choose whether to upload your own image or generate one using a model.")
-
+    with st.sidebar:
+        st.header("Robot Connection")
+        port = st.text_input("Enter the COM port for the robot (e.g., COM4):", "COM4")
+        
+        if st.button("Check Connection", key="check_connection"):
+            is_connected = check_robot_connection(port)
+            if is_connected:
+                st.success(f"Robot connected successfully on port {port}.")
+            else:
+                st.error(f"Failed to connect to the robot on port {port}. Please check the connection or port.")
     # User choice: upload or generate
     choice = st.radio("What would you like to do?", ["Upload an Image", "Generate an Image"])
     if "temp_image_path" not in st.session_state:
         st.session_state["temp_image_path"] = None
-    
+    # Upload Section
     if choice == "Upload an Image":
-        # Image Upload Section
         st.header("Upload Your Image")
         uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "png", "jpeg"])
         if uploaded_file is not None:
@@ -160,15 +166,12 @@ def main():
                     uploaded_image.save(temp_file.name)
                     temp_image_path = temp_file.name
                     st.session_state["temp_image_path"] = temp_image_path
-                    st.write(f"Uploaded image saved at: {temp_image_path}")
+                    #st.write(f"Uploaded image saved at: {temp_image_path}")
 
-                #if st.button("Draw Uploaded Image"):
-                    #handle_drawing(temp_image_path)
 
             except Exception as e:
                 st.error(f"Error handling uploaded image: {e}")
-        #else:
-            #st.warning("Please upload an image file to proceed.")
+        
 
     else:
         # Image Generation Section
@@ -188,19 +191,7 @@ def main():
             temp_image_path = handle_image_generation(prompt, model_name, model_url)
             if temp_image_path:
                 st.session_state["temp_image_path"] = temp_image_path
-            #if st.button("Draw Generated Image", key=f"draw_{model_name}"):
-            # Ensure the path exists in session state
-                #if "generated_image_path" in st.session_state and st.session_state["generated_image_path"]:
-                    #st.success("🎨 Sending generated image to the robot for drawing...")
-                    #try:
-                    # Process the image
-                        #output_path = image_preprocessing.pipeline(st.session_state["generated_image_path"], True)
-                        #st.image(Image.open(output_path), caption="Processed Image", use_container_width=True)
-                    #except Exception as e:
-                        #st.error(f"An error occurred while processing the image: {e}")
-                #else:
-                    #st.warning("No generated image found. Please generate an image first.")
-    
+           
     if st.session_state["temp_image_path"]:
         if st.button("Process and Draw Image"):
             handle_drawing(st.session_state["temp_image_path"])
