@@ -7,6 +7,8 @@ import tempfile
 import image_preprocessing
 import time
 import dobot_controller
+from huggingface_hub import InferenceClient
+import os
 
 
 st.set_page_config(
@@ -18,42 +20,50 @@ st.set_page_config(
 # Hugging Face API token
 headers = {"Authorization": "Bearer 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"}
 
-# Model URLs with descriptions
-model_urls = {
-    "Doodle Redmond (Hand Drawing Style)": {
-        "url": "https://api-inference.huggingface.co/models/artificialguybr/doodle-redmond-doodle-hand-drawing-style-lora-for-sd-xl",
-        "description": "Generates sketched, hand-drawn style images."
-    },
-    "FLUX (Children Simple Sketch)": {
-        "url": "https://api-inference.huggingface.co/models/Shakker-Labs/FLUX.1-dev-LoRA-Children-Simple-Sketch",
-        "description": "Produces simple childlike sketches with playful themes."
-    },
-    "Gesture Draw": {
-        "url": "https://api-inference.huggingface.co/models/glif/Gesture-Draw",
-        "description": "Specializes in capturing dynamic gestures in drawings."
-    }
-}
+client = InferenceClient(
+    provider="fal-ai",
+    api_key=os.environ.get("HF_TOKEN", "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")
+)
+
 
 # Query Hugging Face API for image generation
-def query_huggingface(prompt, api_url, retries=3, timeout=60):
+def query_huggingface(prompt, model_id, retries=3):
     modified_prompt = f"{prompt}, sketched, outlined"
     attempt = 0
     while attempt < retries:
         try:
-            response = requests.post(api_url, headers=headers, json={"inputs": modified_prompt}, timeout=timeout)
-            response.raise_for_status()  # Check for HTTP errors
-            if response.headers["Content-Type"] == "application/json":
-                return None, response.json()
-            return response.content, None
-        except requests.exceptions.Timeout:
+            # Use the InferenceClient to generate image
+            image = client.text_to_image(
+                modified_prompt,
+                model=model_id
+            )
+            # Convert PIL Image to bytes
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='PNG')
+            return img_byte_arr.getvalue(), None
+        except Exception as e:
             attempt += 1
             if attempt < retries:
-                st.warning(f"Timeout occurred. Retrying... ({attempt}/{retries})")
-                time.sleep(5)  # Wait before retrying
+                st.warning(f"Error occurred. Retrying... ({attempt}/{retries})")
+                time.sleep(5)
             else:
-                return None, {"error": "The request timed out after multiple retries. Please try again later."}
-        except requests.exceptions.RequestException as e:
-            return None, {"error": str(e)}
+                return None, {"error": str(e)}
+
+# Model URLs with descriptions
+model_urls = {
+    "Doodle Redmond (Hand Drawing Style)": {
+        "model_id": "artificialguybr/doodle-redmond-doodle-hand-drawing-style-lora-for-sd-xl",
+        "description": "Generates sketched, hand-drawn style images."
+    },
+    "FLUX (Children Simple Sketch)": {
+        "model_id": "Shakker-Labs/FLUX.1-dev-LoRA-Children-Simple-Sketch",
+        "description": "Produces simple childlike sketches with playful themes."
+    },
+    "Gesture Draw": {
+        "model_id": "glif/Gesture-Draw",
+        "description": "Specializes in capturing dynamic gestures in drawings."
+    }
+}
 
 # Save image to a temporary file
 def save_image_to_tempfile(image_bytes):
@@ -83,12 +93,12 @@ def check_robot_connection(port):
         return False
 
 # Handle image generation and display
-def handle_image_generation(prompt, model_name, model_url):
+def handle_image_generation(prompt, model_name, model_id):
     if prompt.strip() == "":
         st.warning("Please enter a prompt.")
         return None
 
-    image_bytes, error = query_huggingface(prompt, model_url)
+    image_bytes, error = query_huggingface(prompt, model_id)
     if error:
         st.error(f"Error: {error.get('error', 'An unknown error occurred')}")
         return None
@@ -98,9 +108,8 @@ def handle_image_generation(prompt, model_name, model_url):
 
     try:
         temp_image_path = save_image_to_tempfile(image_bytes)
-        st.image(Image.open(temp_image_path), caption=f"Generated Image ({model_name})", use_container_width=True)
+        st.image(Image.open(temp_image_path), caption=f"Generated Image ({model_name})", width="stretch")
         st.session_state["generated_image_path"] = temp_image_path
-        #st.write(f"Generated image saved at: {temp_image_path}")
         return temp_image_path
     except Exception as e:
         st.error(f"Error saving image: {e}")
@@ -111,7 +120,8 @@ def handle_drawing(temp_image_path):
     try:
         st.success("🎨 Sending image to the robot for drawing...")
         #print(f"Type of temp_image_path: {type(temp_image_path)}")  # Debugging line
-
+        output_path = process_image(temp_image_path)
+        st.image(Image.open(output_path), caption="Processed Image for Robot", width="stretch")
         # Ensure temp_image_path is a string (a single path), not a list
         if isinstance(temp_image_path, list):
             # Handle the case where temp_image_path is a list
@@ -164,7 +174,7 @@ def main():
         if uploaded_file is not None:
             try:
                 uploaded_image = Image.open(uploaded_file)
-                st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
+                st.image(uploaded_image, caption="Uploaded Image", width="stretch")
 
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
                     uploaded_image.save(temp_file.name)
@@ -190,9 +200,9 @@ def main():
         )
 
         if st.button("Generate Image"):
-            model_url = model_urls[model_name]["url"]
+            model_id = model_urls[model_name]["model_id"]
             
-            temp_image_path = handle_image_generation(prompt, model_name, model_url)
+            temp_image_path = handle_image_generation(prompt, model_name, model_id)
             if temp_image_path:
                 st.session_state["temp_image_path"] = temp_image_path
            

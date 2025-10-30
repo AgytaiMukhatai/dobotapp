@@ -6,34 +6,37 @@ from shapely.geometry import LineString
 import matplotlib.pyplot as plt
 import streamlit as st
 from svgpathtools import svg2paths
+import os
 
 
 # Function to convert JPEG to SVG using potrace
 def jpg_to_svg(jpg_file):
     """
     Converts a JPEG image to an SVG file using potrace.
-
-    Parameters:
-    - jpeg_file (str): Path to the JPEG file.
-
-    Returns:
-    - svg_file (str): Path to the generated SVG file.
     """
-    # Convert JPEG to PNM format (required by potrace)
-    
+    try:
+        # Check if potrace is installed
+        subprocess.run(["which", "potrace"], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        raise RuntimeError("Potrace is not installed. Please install it using 'brew install potrace'")
+
     pnm_file = jpg_file.replace('.jpg', '.pnm')
     svg_file = jpg_file.replace('.jpg', '.svg')
     
-    
     Image.open(jpg_file).convert('L').save(pnm_file)
 
-    # Use potrace to convert PNM to SVG
-    subprocess.run(["potrace", "-s", pnm_file, "-o", svg_file])
-
-    # Clean up the intermediate PNM file
-    #os.remove(pnm_file)
-
-    return svg_file
+    try:
+        # Use potrace to convert PNM to SVG
+        result = subprocess.run(["potrace", "-s", pnm_file, "-o", svg_file], 
+                              check=True, 
+                              capture_output=True)
+        # Clean up the intermediate PNM file
+        os.remove(pnm_file)
+        return svg_file
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Potrace conversion failed: {e.stderr.decode()}")
+    except Exception as e:
+        raise RuntimeError(f"Error during SVG conversion: {str(e)}")
 
 # Function to extract paths from SVG file
 def svg_to_paths(svg_file):
