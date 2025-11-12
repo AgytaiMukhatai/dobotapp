@@ -44,7 +44,7 @@ class DobotController:
             raise ValueError(f"Invalid point: {point}. Must have two coordinates.")
         return float(point[0]), float(point[1])
 
-    def draw_path(self, path, draw_z=-60, lift_z=-50):
+    def draw_path(self, path, draw_z=-53, lift_z=-20):
         """Draw a path connecting all points in the given path."""
         if len(path) < 2:
             print("Path is too short to draw.")
@@ -63,7 +63,7 @@ class DobotController:
         x, y = self.validate_point(path[-1])
         self.move_pen(x, y, lift_z)
     
-    def draw_paths(self, paths, draw_z=-60, lift_z=-30):
+    def draw_paths(self, paths, draw_z=-53, lift_z=-20):
         """Draw multiple paths, lifting the pen between paths."""
         for path in paths:
             if path:

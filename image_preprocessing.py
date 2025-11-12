@@ -9,6 +9,7 @@ from svgpathtools import svg2paths
 import os
 
 
+
 # Function to convert JPEG to SVG using potrace
 def jpg_to_svg(jpg_file):
     """
@@ -135,7 +136,6 @@ def simplify_paths(paths, tolerance=0.1):
         simplified_paths.append(list(simplified_line.coords))
     return simplified_paths
 
-# Visualzie all the paths
 def visualize_paths(paths, title="Adjusted Paths"):
     """
     Visualizes adjusted paths.
@@ -150,18 +150,26 @@ def visualize_paths(paths, title="Adjusted Paths"):
         plt.plot(x_coords, y_coords, marker='o', markersize=2)  # Draw connected points
     plt.gca().invert_yaxis()
     plt.title(title)
-    plt.xlabel('X-axis')
-    plt.ylabel('Y-axis')
+    plt.xlabel('X-axis (mm)')
+    plt.ylabel('Y-axis (mm)')
     plt.grid(True)
     st.pyplot(plt)
 
 
-def pipeline(jpeg_file, visualize=False):
-
-    # Borders of the drawing
-    min_x, max_x = 0, 300
-    min_y, max_y = -150, 150
-
+def pipeline(jpeg_file, visualize=False, min_x=170, max_x=280, min_y=-50, max_y=50):
+    """
+    Main pipeline for converting JPEG to robot drawing paths.
+    
+    Parameters:
+    - jpeg_file (str): Path to input JPEG file
+    - visualize (bool): Whether to visualize the paths
+    - min_x, max_x (float): X-axis workspace boundaries in mm
+    - min_y, max_y (float): Y-axis workspace boundaries in mm
+    
+    Returns:
+    - simplified_paths: List of drawing paths with coordinates
+    """
+    
     # 1. Convert JPEG to SVG
     svg_file = jpg_to_svg(jpeg_file)
 
@@ -176,12 +184,9 @@ def pipeline(jpeg_file, visualize=False):
 
     # 5. Visualize paths (optional)
     if visualize:
-        visualize_paths(simplified_paths)
-        print(simplified_paths)
+        visualize_paths(simplified_paths, 
+                       title=f"Drawing Paths (X: {min_x}-{max_x}mm, Y: {min_y}-{max_y}mm)")
+        print(f"Workspace: X[{min_x}, {max_x}], Y[{min_y}, {max_y}]")
+        print(f"Number of paths: {len(simplified_paths)}")
     
     return simplified_paths
-
-
-
-
-
