@@ -22,11 +22,12 @@ st.set_page_config(
 )
 
 # Hugging Face API token
-headers = {"Authorization": "Bearer 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"}
+
+HF_TOKEN = os.getenv("HF_TOKEN")  # no default fallback
 
 client = InferenceClient(
     provider="fal-ai",
-    api_key=os.environ.get("HF_TOKEN", "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")
+    api_key=HF_TOKEN
 )
 
 

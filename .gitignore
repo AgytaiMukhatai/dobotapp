@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+venv/
+.env
+.venv/
+ENV/
+env/
+env.bak/
+
+# Mac & IDE files
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets / configs
+*.key
+*.pem
+*.json
+*.cfg
+*.ini
+
+# Streamlit cache
+.streamlit/
