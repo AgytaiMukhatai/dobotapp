@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 
 # Environments
+dobot/
 venv/
 .env
 .venv/
