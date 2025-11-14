@@ -13,6 +13,8 @@ import home
 import circle
 from lib.interface import Interface
 from lib.dobot import Dobot 
+import threading
+
 
 
 st.set_page_config(
@@ -33,7 +35,7 @@ client = InferenceClient(
 
 # Query Hugging Face API for image generation
 def query_huggingface(prompt, model_id, retries=3):
-    modified_prompt = f"{prompt}, sketched, outlined"
+    modified_prompt = f"{prompt}, line drawing, simple sketch, black and white, minimalistic"
     attempt = 0
     while attempt < retries:
         try:
@@ -122,32 +124,37 @@ def handle_image_generation(prompt, model_name, model_id):
 
 # Handle sending image to robot for drawing
 # Handle sending image to robot for drawing
-def handle_drawing(temp_image_path):
+def handle_drawing(coordinates, stop_event=None):
     try:
-        # Check for emergency stop
-        if st.session_state.get("emergency_stop", False):
-            st.warning("⚠️ Process interrupted by emergency stop!")
+        if stop_event is not None and stop_event.is_set():
+            print("[DRAW] Stop event set before drawing. Aborting.")
             return
-            
-        st.success("🎨 Sending image to the robot for drawing...")
-        
-        # Get coordinates directly from pipeline
-        coordinates = image_preprocessing.pipeline(temp_image_path, True)
-        if not coordinates:
-            raise ValueError("Image preprocessing returned empty data.")
-            
-        # Show the processed image (if available)
-        st.image(Image.open(temp_image_path), caption="Original Image", width="stretch")
-        
-        # Display coordinates visualization using the built-in function
-        image_preprocessing.visualize_paths(coordinates)
-            
-        # Initialize robot and draw
-        dobot = dobot_controller.DobotController("/dev/tty.usbserial-0001")
-        dobot.draw_paths(coordinates)
+
+        # Use the same port as the one used in "Check Connection"
+        port = getattr(st.session_state, "robot_port", "/dev/tty.usbserial-0001")
+        print(f"[DRAW] Starting drawing on port {port}")
+
+        dobot = dobot_controller.DobotController(port)
+        dobot.draw_paths(coordinates, stop_event=stop_event)
+
+        print("[DRAW] Drawing finished.")
+
+    except Exception as e:
+        # This will show up in your terminal where you run `streamlit run`
+        print(f"[DRAW ERROR] {e}")
+
 
     except Exception as e:
         st.error(f"An error occurred while processing the image: {e}")
+
+def drawing_worker(coordinates, stop_event):
+    try:
+        handle_drawing(coordinates, stop_event)
+    finally:
+        stop_event.clear()
+        # Signal completion with a simple flag
+        st.session_state["drawing_done"] = True
+
 
 # Main Streamlit app
 def main():
@@ -162,30 +169,48 @@ def main():
         st.session_state.dobot = None
     if 'emergency_stop' not in st.session_state:
         st.session_state.emergency_stop = False
+    if 'drawing_thread' not in st.session_state:
+        st.session_state.drawing_thread = None
+    if 'stop_event' not in st.session_state:
+        st.session_state.stop_event = threading.Event()
+
     
     with st.sidebar:
         # Emergency Stop Button - Prominent at the top
         st.markdown("### 🚨 Emergency Controls")
         if st.button("🛑 EMERGENCY STOP & HOME", 
-                    key="emergency_stop_btn", 
-                    type="primary",
-                    use_container_width=True):
+                     key="emergency_stop_btn", 
+                     type="primary",
+                     use_container_width=True):
             try:
+                # 1) Flip global flags
                 st.session_state.emergency_stop = True
+
+                if 'stop_event' in st.session_state and st.session_state.stop_event is not None:
+                    st.session_state.stop_event.set()
+
+                # 2) If we have a Dobot instance, call its low-level stop if available
+                if st.session_state.dobot is not None:
+                    try:
+                        # Implement this in your Dobot class:
+                        # - immediately stop all motors
+                        # - clear buffer / queue
+                        st.session_state.dobot.emergency_stop()
+                    except AttributeError:
+                        # If there's no emergency_stop() method yet, you can ignore this
+                        pass
+
+                # 3) Optionally move home AFTER stop is triggered
                 if st.session_state.bot is None:
                     st.error("⚠️ Robot not connected! Please connect first.")
                 else:
                     with st.spinner("Stopping all processes and returning to home..."):
-                        # Move to home position
                         home.move_to_home(st.session_state.bot)
                         st.success("✅ Emergency stop executed! Robot moved to home position.")
-                        # Reset emergency stop flag after successful return
-                        time.sleep(1)
-                        st.session_state.emergency_stop = False
+
             except Exception as e:
                 st.error(f"❌ Emergency stop failed: {e}")
-                st.session_state.emergency_stop = False
-        
+
         st.divider()
         
         st.header("Robot Connection")
@@ -194,6 +219,7 @@ def main():
         if st.button("Check Connection", key="check_connection"):
             try:
                 # Create or update bot connection
+                st.session_state.robot_port = port
                 st.session_state.bot = Interface(port)
                 st.session_state.dobot = Dobot(port)
                 
@@ -227,51 +253,6 @@ def main():
         
         st.divider()
         
-        # Workspace Configuration
-        st.header("⚙️ Workspace Configuration")
-        st.write("Set the safe drawing area for your robot:")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            workspace_x_min = st.number_input("X Min (mm)", value=150.0, step=10.0, 
-                                             help="Minimum safe X coordinate")
-            workspace_x_max = st.number_input("X Max (mm)", value=250.0, step=10.0,
-                                             help="Maximum safe X coordinate")
-        with col2:
-            workspace_y_min = st.number_input("Y Min (mm)", value=-50.0, step=10.0,
-                                             help="Minimum safe Y coordinate")
-            workspace_y_max = st.number_input("Y Max (mm)", value=50.0, step=10.0,
-                                             help="Maximum safe Y coordinate")
-        
-        # Store workspace in session state
-        st.session_state.workspace = {
-            'x_min': workspace_x_min,
-            'x_max': workspace_x_max,
-            'y_min': workspace_y_min,
-            'y_max': workspace_y_max
-        }
-        
-        st.divider()
-        
-        # Draw Circle section
-        st.header("Draw Circle")
-        
-        radius = st.slider("Circle Radius (mm)", min_value=10, max_value=100, value=50, step=5)
-        steps = st.slider("Circle Smoothness", min_value=12, max_value=72, value=24, step=6, 
-                         help="Higher values create smoother circles but take longer to draw")
-        
-        if st.button("Draw Circle", key="draw_circle"):
-            try:
-                if st.session_state.dobot is None:
-                    st.warning("Please connect to the robot first using 'Check Connection'.")
-                elif st.session_state.emergency_stop:
-                    st.warning("⚠️ Emergency stop active. Please reconnect to reset.")
-                else:
-                    with st.spinner(f"Drawing circle with radius {radius}mm..."):
-                        circle.draw_circle(st.session_state.dobot, radius=radius, steps=steps)
-                    st.success(f"Circle drawn successfully!")
-            except Exception as e:
-                st.error(f"Failed to draw circle: {e}")
     
     
     # User choice: upload or generate
@@ -299,7 +280,7 @@ def main():
     else:
         # Image Generation Section
         st.header("Generate an Image")
-        prompt = st.text_input("Enter your prompt:", "Astronaut riding a horse")
+        prompt = st.text_input("Enter your prompt:", "Cat with the balloon")
 
         # Select model
         model_name = st.selectbox(
@@ -320,9 +301,51 @@ def main():
             if st.session_state.emergency_stop:
                 st.warning("⚠️ Emergency stop active. Please reconnect the robot to reset.")
             else:
-                handle_drawing(st.session_state["temp_image_path"])
+                # Prevent starting two drawings at once
+                if (st.session_state.drawing_thread is not None and 
+                    st.session_state.drawing_thread.is_alive()):
+                    st.warning("A drawing is already in progress.")
+                else:
+                    # 1) Preprocess image -> coordinates (MAIN THREAD)
+                    with st.spinner("Processing image to extract paths..."):
+                        try:
+                            coordinates = image_preprocessing.pipeline(
+                                st.session_state["temp_image_path"], 
+                                True
+                            )
+                        except Exception as e:
+                            st.error(f"Error during image processing: {e}")
+                            coordinates = None
+
+                    if not coordinates:
+                        st.error("Image preprocessing returned no coordinates.")
+                    else:
+                        st.write(f"Number of paths: {len(coordinates)}")
+
+                        # 2) Show original image (MAIN THREAD)
+                        st.image(
+                            Image.open(st.session_state["temp_image_path"]),
+                            caption="Original Image",
+                            width="stretch"
+                        )
+
+                        # 3) Visualize paths (MAIN THREAD)
+                        image_preprocessing.visualize_paths(coordinates)
+
+                        # 4) Start background drawing thread (ROBOT ONLY)
+                        st.session_state.stop_event.clear()
+                        st.session_state.drawing_done = False
+                        t = threading.Thread(
+                            target=drawing_worker,
+                            args=(coordinates, st.session_state.stop_event),
+                            daemon=True,
+                        )
+                        t.start()
+                        st.session_state.drawing_thread = t
+                        st.success("🖊️ Drawing started in background.")
     else:
         st.info("Please upload or generate an image first to enable drawing.")
+
     
 
 if __name__ == "__main__":
